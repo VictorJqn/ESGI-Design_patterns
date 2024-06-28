@@ -2,11 +2,10 @@
     "name": "votre-nom/payment-library",
     "autoload": {
         "psr-4": {
-            "PaymentLibrary\\": "src/"
+            "PaymentLibrary\\": "./src/"
         }
     },
     "require": {
-        "php": ">=7.4",
-        "guzzlehttp/guzzle": "^7.8" 
+        "php": ">=7.4"
     }
 }

@@ -7,5 +7,6 @@ interface PaymentInterface
     public function createTransaction(float $amount, string $currency, string $description);
     public function executeTransaction();
     public function cancelTransaction();
+    public function deletePaymentIntent(string $paymentIntentId);
     public function getStatus();
     }

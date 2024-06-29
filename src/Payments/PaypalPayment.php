@@ -5,10 +5,10 @@ namespace PaymentLibrary\Payments;
 use PaymentLibrary\Interfaces\PaymentInterface;
 use PaymentLibrary\Exceptions\PaymentException;
 
-class StripePayment implements PaymentInterface
+class PaypalPayment implements PaymentInterface
     {
     private $config;
-    private $paymentIntentId;
+    private $paymentId;
 
     public function initialize(array $config)
         {
@@ -17,20 +17,24 @@ class StripePayment implements PaymentInterface
 
     public function createTransaction(float $amount, string $currency, string $description)
         {
-        $url = 'https://api.stripe.com/v1/payment_intents';
+        $url = 'https://api.paypal.com/v2/checkout/orders';
         $data = [
-            'amount' => $amount * 100,
-            'currency' => $currency,
-            'description' => $description,
-            'payment_method' => 'pm_card_visa',
-            'automatic_payment_methods[enabled]' => 'true',
-            'automatic_payment_methods[allow_redirects]' => 'never'
+            'intent' => 'CAPTURE',
+            'purchase_units' => [
+                [
+                    'amount' => [
+                        'currency_code' => $currency,
+                        'value' => $amount
+                    ],
+                    'description' => $description
+                ]
+            ]
         ];
 
         $response = $this->sendRequest('POST', $url, $data);
 
         if (isset($response['id'])) {
-            $this->paymentIntentId = $response['id'];
+            $this->paymentId = $response['id'];
             return http_response_code(200);
             } else {
             return http_response_code(400);
@@ -39,55 +43,46 @@ class StripePayment implements PaymentInterface
 
     public function executeTransaction()
         {
-        if (!$this->paymentIntentId) {
+        if (!$this->paymentId) {
             throw new PaymentException("No transaction initialized");
             }
 
-        $url = 'https://api.stripe.com/v1/payment_intents/' . $this->paymentIntentId . '/confirm';
-        $data = [
-            'payment_method' => 'pm_card_visa',
-            'return_url' => 'http://127.0.0.1:8080/'
-        ];
+        $url = 'https://api.paypal.com/v2/checkout/orders/' . $this->paymentId . '/capture';
+        $data = [];
 
         $response = $this->sendRequest('POST', $url, $data);
 
-        if (isset($response['status'])) {
-            if ($response['status'] === 'succeeded') {
-                return http_response_code(200);
-                } else {
-                throw new PaymentException("Failed to confirm transaction: " . (isset($response['error']) ? $response['error']['message'] : "Unknown error"));
-                }
+        if (isset($response['status']) && $response['status'] === 'COMPLETED') {
+            return http_response_code(200);
             } else {
-            throw new PaymentException("Invalid response from Stripe API");
+            throw new PaymentException("Failed to capture transaction: " . (isset($response['error']) ? $response['error']['message'] : "Unknown error"));
             }
         }
 
     public function cancelTransaction()
         {
-        if (!$this->paymentIntentId) {
+        if (!$this->paymentId) {
             throw new PaymentException("No transaction initialized");
             }
 
-        $url = 'https://api.stripe.com/v1/payment_intents/' . $this->paymentIntentId . '/cancel';
+        $url = 'https://api.paypal.com/v2/checkout/orders/' . $this->paymentId . '/cancel';
         $this->sendRequest('POST', $url);
         }
 
-    public function deletePaymentIntent(string $paymentIntentId)
+    public function deletePaymentIntent(string $paymentId)
         {
-        $url = 'https://api.stripe.com/v1/payment_intents/' . $paymentIntentId . '/cancel';
+        $url = 'https://api.paypal.com/v2/checkout/orders/' . $paymentId . '/cancel';
         $response = $this->sendRequest('POST', $url);
-        if (isset($response['status']) && $response['status'] === 'canceled') {
+        if (isset($response['status']) && $response['status'] === 'CANCELLED') {
             return http_response_code(200);
             } else {
-            throw new PaymentException("Failed to cancel PaymentIntent: " . (isset($response['error']) ? $response['error']['message'] : "Unknown error"));
+            throw new PaymentException("Failed to cancel PaymentOrder: " . (isset($response['error']) ? $response['error']['message'] : "Unknown error"));
             }
         }
 
-
-
     public function getStatus()
         {
-        $url = 'https://api.stripe.com/v1/payment_intents/' . $this->paymentIntentId;
+        $url = 'https://api.paypal.com/v2/checkout/orders/' . $this->paymentId;
         $response = $this->sendRequest('GET', $url);
         return $response['status'];
         }
@@ -101,11 +96,11 @@ class StripePayment implements PaymentInterface
         curl_setopt($ch, CURLOPT_CUSTOMREQUEST, $method);
         curl_setopt($ch, CURLOPT_HTTPHEADER, [
             'Authorization: Bearer ' . $this->config['api_key'],
-            'Content-Type: application/x-www-form-urlencoded'
+            'Content-Type: application/json'
         ]);
 
         if ($data) {
-            curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($data));
+            curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
             }
 
         $response = curl_exec($ch);
@@ -120,7 +115,7 @@ class StripePayment implements PaymentInterface
         $decodedResponse = json_decode($response, true);
 
         if ($httpCode >= 400) {
-            $errorMessage = isset($decodedResponse['error']['message']) ? $decodedResponse['error']['message'] : 'Unknown error';
+            $errorMessage = isset($decodedResponse['message']) ? $decodedResponse['message'] : 'Unknown error';
             throw new PaymentException('API request failed with response: ' . $errorMessage);
             }
 

@@ -64,6 +64,9 @@ class PaypalPayment implements PaymentInterface
         if (!$this->paymentId) {
             throw new PaymentException("No transaction initialized");
             }
+        if ($this->getStatus() == "succeeded") {
+            throw new PaymentException("Cannot cancel a completed transaction");
+            }
 
         $url = 'https://api.paypal.com/v2/checkout/orders/' . $this->paymentId . '/cancel';
         $this->sendRequest('POST', $url);

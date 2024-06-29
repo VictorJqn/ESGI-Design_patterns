@@ -68,6 +68,10 @@ class StripePayment implements PaymentInterface
             throw new PaymentException("No transaction initialized");
             }
 
+        if ($this->getStatus() == "succeeded") {
+            throw new PaymentException("Cannot cancel a completed transaction");
+            }
+
         $url = 'https://api.stripe.com/v1/payment_intents/' . $this->paymentIntentId . '/cancel';
         $this->sendRequest('POST', $url);
         }
